@@ -24,6 +24,8 @@ public:
     TMXTiledMap * getMap();
     bool canMove(Common::DIRECTION dir);
     void move(Common::DIRECTION dir);
+    void doMove();
+    //移动方向
     Common::DIRECTION _dir;
     
     void turn(Common::DIRECTION dir);

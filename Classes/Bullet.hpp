@@ -20,6 +20,7 @@ public:
     void setImage(const char *filename);
     //杀伤力
     int _demage;
+    static void checkBullets(TMXTiledMap * map, Vector<Bullet *> bullets);
 };
 
 #endif /* Bullet_hpp */

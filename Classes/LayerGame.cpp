@@ -9,6 +9,7 @@
 #include "LayerGame.hpp"
 #include "MenuCtrl.hpp"
 #include "Bullet.hpp"
+#include "LayerMenu.hpp"
 
 LayerGame * LayerGame::create(unsigned int index){
     LayerGame *Ref = new LayerGame;
@@ -26,6 +27,27 @@ bool LayerGame::init(unsigned int index){
     if (!Layer::init()) {
         return false;
     }
+    
+    _index = index;
+    
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/bonus.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/brickhit.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/eexplosion.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/gameover.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/ice.wav");
+    
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/levelstarting.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/life.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/moving.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/nmoving.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/pause.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/shieldhit.wav");
+    
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/shoot.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/steelhit.wav");
+    SimpleAudioEngine::getInstance()->preloadEffect("sounds/tbonushit.wav");
+    
+    SimpleAudioEngine::getInstance()->playEffect("sounds/levelstarting.wav");
     
     _nSoundId = SimpleAudioEngine::getInstance()->playEffect("levelstarting.wav");
     
@@ -79,12 +101,31 @@ bool LayerGame::init(unsigned int index){
     itemShoot->setPosition(-centerVec.x, centerVec.y);
     
     addChild(menuShoot);
-    
+    //超时监测
+    schedule(schedule_selector(LayerGame::timeOut), TIME_OVER);
     //做碰撞监测
     scheduleUpdate();
     //创建AI对象
+    _ai = AI::create();
+    _map->addChild(_ai);
     
+    _vectoryCount = 10;
+    _currCount = 0;
     
+    _life = 3;
+    _godMode = false;
+    
+    //预加载爆炸动画
+    Vector<SpriteFrame *> frames;
+    SpriteFrameCache *cache = SpriteFrameCache::getInstance();
+    cache->addSpriteFramesWithFile("blast.plist");
+    for (int i=1; i<=8; ++i) {
+        SpriteFrame *frame = cache->getSpriteFrameByName(Common::formatT(i, "blast", ".gif"));
+        frames.pushBack(frame);
+    }
+    
+    Animation *anim = Animation::createWithSpriteFrames(frames, 0.1f);
+    AnimationCache::getInstance()->addAnimation(anim, TANK_BOMD);
     
     return true;
 }
@@ -101,57 +142,90 @@ void LayerGame::shoot(Ref *pSender){
 }
 
 void LayerGame::update(float dt){
-//    SimpleAudioEngine::getInstance()->playEffect("nmoving.wav");
-    int count = _bulletVec.size();
-    Size szMap = _map->getContentSize();
-    Rect rcMap = Rect(0, 0, szMap.width-1, szMap.height-1);
+    Bullet::checkBullets(_map, _bulletVec);
     
-    TMXLayer *layer = _map->getLayer("layer_0");
+    //友军坦克被击中监测
+    int count = _ai->_bulletVector.size();
     
-    for (int i=count-1; i>=0; --i) {
-        
-        Bullet *b = _bulletVec.at(i);
-        Vec2 vb = b->getPosition();
-        
-        //判断子弹飞出
-        if (!rcMap.containsPoint(vb)) {
+    for (int i=count - 1; i>=0; --i) {
+        Bullet *b = _ai->_bulletVector.at(i);
+        if (b->getBoundingBox().intersectsRect(_tankFriend->getBoundingBox())) {
             b->removeFromParentAndCleanup(true);
-            _bulletVec.eraseObject(b);
-            continue;
+            _ai->_bulletVector.eraseObject(b);
+            
+            if (!_godMode) {
+                if (_life == 1) {
+                    gameOver(TANKDIE);
+                }else{
+                    --_life;
+                    _godMode = true;
+                    
+                    Blink *blink = Blink::create(5, 10);
+                    CallFunc *func = CallFunc::create(CC_CALLBACK_0(LayerGame::unsetGodMode, this));
+                    runAction(Sequence::create(blink, func, NULL));
+                    
+                }
+            }
+            
         }
-        //判断子弹碰到转头，铁块，大本营
-        Vec2 ptTile = Common::Point2Tile(_map, vb);
-        int gid = layer->getTileGIDAt(ptTile);
-        Common::TileType tt = Common::getTileType(gid);
-        if (tt == Common::BLOCK) {
-            SimpleAudioEngine::getInstance()->playEffect("brickhit.wav");
-            b->removeFromParentAndCleanup(true);
-            _bulletVec.eraseObject(b);
-            //转头被打爆
-            layer->setTileGID(0, ptTile);
-            continue;
-        }else if(tt == Common::STEEL){
-            SimpleAudioEngine::getInstance()->playEffect("steelhit.wav");
-            b->removeFromParentAndCleanup(true);
-            _bulletVec.eraseObject(b);
-            continue;
-        }else if (tt == Common::HOME){
-            SimpleAudioEngine::getInstance()->playEffect("gameover.wav");
-            b->removeFromParentAndCleanup(true);
-            _bulletVec.eraseObject(b);
-//            Director::getInstance()->replaceScene(<#cocos2d::Scene *scene#>)
-            continue;
-        }
-        
-        
-        //判断子弹碰到敌军子弹
-        
-        //判断子弹碰到敌军坦克
-        
     }
+    
+    //友军子弹射中敌军坦克
+    count = _bulletVec.size();
+    
+    for (int i=count - 1; i>=0; --i) {
+        Bullet *bullet = _bulletVec.at(i);
+        int enemyCount = _ai->_tankEnemyVector.size();
+        for (int j=enemyCount - 1; j>=0; --j) {
+            TankEnemy *enemy = _ai->_tankEnemyVector.at(j);
+            //判断敌军坦克和友军子弹矩阵相交
+            if (enemy->getBoundingBox().intersectsRect(bullet->getBoundingBox())) {
+                //移除敌军坦克
+//                enemy->removeFromParentAndCleanup(true);
+                _ai->_tankEnemyVector.eraseObject(enemy);
+                //坦克爆炸
+                Animate *anim = Animate::create(AnimationCache::getInstance()->getAnimation(TANK_BOMD));
+                CallFunc *callFunc = CallFunc::create(CC_CALLBACK_0(TankEnemy::removeFromParent, enemy));
+                
+                Sequence *seq = Sequence::create(anim, callFunc, NULL);
+                enemy->runAction(seq);
+                
+                //移除子弹
+                bullet->removeFromParentAndCleanup(true);
+                _bulletVec.eraseObject(bullet);
+                
+                //更新状态
+                ++_currCount;
+                if (_currCount == _vectoryCount) {
+                    if (_index == 19) {
+                        Director::getInstance()->replaceScene(Common::createScene(LayerMenu::create()));
+                    }else{
+                        Director::getInstance()->replaceScene(Common::createScene(LayerGame::create(_index + 1)));
+                    }
+                    
+                }
+                
+                break;
+            }
+        }
+    }
+    
 }
 
 void LayerGame::onExit(){
     Layer::onExit();
     _bulletVec.clear();
+}
+
+void LayerGame::timeOut(float){
+    log("time out");
+    gameOver(FAILURE_REASON::TIMEOUT);
+}
+
+void LayerGame::gameOver(FAILURE_REASON reason){
+    Director::getInstance()->replaceScene(Common::createScene(LayerMenu::create()));
+}
+
+void LayerGame::unsetGodMode(){
+    
 }

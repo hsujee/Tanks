@@ -16,6 +16,10 @@ USING_NS_CC;
 #define winSize Director::getInstance()->getWinSize()
 #define TANK_SPEED 2
 #define BULLET_SPEED 4
+#define TANK_CREATE_INIERVAL 5
+#define TANK_SHOOT_INIERVAL 1
+#define TIME_OVER 300
+#define TANK_BOMD "TANK_BOMD"
 
 class Common{
 public:
@@ -63,7 +67,7 @@ public:
     }
     
     /** 将openGL坐标转换成地图坐标 */
-    static Vec2 Point2Tile(TMXTiledMap* map, CCPoint ptMap)
+    static Vec2 Point2Tile(TMXTiledMap* map, Vec2 ptMap)
     {
         int dx = map->getTileSize().width;
         int dy = map->getTileSize().height;
@@ -88,6 +92,11 @@ public:
         
         return NONE;
     }
+    
+//    static void checkBullets(TMXTiledMap map, Vector<Bullet> bullets){
+//        
+//    }
+    
 };
 
 #endif /* Common_h */

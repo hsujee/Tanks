@@ -95,7 +95,11 @@ void TankFriend::move(Common::DIRECTION dir){
     
     SimpleAudioEngine::getInstance()->playEffect("moving.wav");
     
-    switch (dir) {
+    doMove();
+}
+
+void TankFriend::doMove(){
+    switch (_dir) {
         case Common::UP:
             Common::moveNodeY(this, TANK_SPEED);
             break;
@@ -108,10 +112,10 @@ void TankFriend::move(Common::DIRECTION dir){
         case Common::RIGHT:
             Common::moveNodeX(this, TANK_SPEED);
             break;
-    
+            
         default:
             break;
-        }
+    }
 }
 
 void TankFriend::turn(Common::DIRECTION dir){
